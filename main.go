@@ -82,6 +82,11 @@ func main() {
 			description: "Get detailed stats about a Pokémon",
 			callback:    commandInspect,
 		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "See what pokemon you have caught",
+			callback:    commandPokedex,
+		},
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -372,7 +377,7 @@ func commandExplore(args []string) error {
 
 func commandInspect(args []string) error {
 	if len(args) == 0 {
-		fmt.Println("Usage: inspect <pokemon_name>")
+		fmt.Println("Usage: inspect <pokémon_name>")
 		return nil
 	}
 
@@ -393,6 +398,20 @@ func commandInspect(args []string) error {
 	fmt.Println("Stats:")
 	for _, StatEntry := range Pokedex[pokemonName].Stats {
 		fmt.Printf("  - %s: %d\n", StatEntry.Stat.Name, StatEntry.BaseStat)
+	}
+
+	return nil
+}
+
+func commandPokedex(args []string) error {
+	if len(Pokedex) == 0 {
+		fmt.Println("You have not caught any pokémon!")
+		fmt.Println("Use \"catch <pokémon_name>\" to attempt a capture.")
+		return nil
+	}
+	fmt.Println("Your Pokédex:")
+	for name := range Pokedex {
+		fmt.Printf("  - %s\n", name)
 	}
 
 	return nil
