@@ -42,7 +42,9 @@ type LocationAreaRef struct {
 
 // Pokemon represents the data structure for a Pokémon.
 type Pokemon struct {
-	Name string `json:"name"`
+	Name   string `json:"name"`
+	Height int    `json:"height"`
+	BaseXP int    `json:"base_experience"`
 	// Add other relevant fields as needed.
 }
 

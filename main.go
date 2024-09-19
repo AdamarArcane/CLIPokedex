@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -12,14 +13,26 @@ import (
 	pokecache "github.com/adamararcane/CLIPokedex/internal/pokecache"
 )
 
+// ---------- Data Structures ----------
+
+// Struct to navigate world
 type Config struct {
 	Next     string `json:"next"`
 	Previous string `json:"previous"`
 }
 
+// Structures CLI commands
+type cliCommand struct {
+	name        string
+	description string
+	callback    func(args []string) error
+}
+
+// Init
 var config Config
 var commands map[string]cliCommand
 var cache *pokecache.Cache
+var Pokedex = make(map[string]pokeapi.Pokemon)
 
 func init() {
 	// Initialize the cache with a cleanup interval of 60 seconds
@@ -32,6 +45,7 @@ func main() {
 		return
 	}
 
+	// Init commands
 	commands = map[string]cliCommand{
 		"help": {
 			name:        "help",
@@ -40,7 +54,7 @@ func main() {
 		},
 		"exit": {
 			name:        "exit",
-			description: "Exit the Pokedex",
+			description: "Exit the Pokédex",
 			callback:    commandExit,
 		},
 		"map": {
@@ -58,13 +72,18 @@ func main() {
 			description: "Explore a location area to see Pokémon",
 			callback:    commandExplore,
 		},
+		"catch": {
+			name:        "catch",
+			description: "Attempt to capture a Pokémon",
+			callback:    commandCatch,
+		},
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Welcome to the CLI Pokedex! Type 'help' for available commands.")
+	fmt.Println("Welcome to the CLI Pokédex! Type 'help' for available commands.")
 
 	for {
-		fmt.Print("Pokedex > ")
+		fmt.Print("Pokédex > ")
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
@@ -85,7 +104,7 @@ func main() {
 				fmt.Println("Error:", err)
 			}
 			if commandName == "exit" {
-				fmt.Println("Thanks for using the CLI Pokedex!")
+				fmt.Println("Thanks for using the CLI Pokédex!")
 				break
 			}
 		} else {
@@ -98,11 +117,7 @@ func main() {
 	}
 }
 
-type cliCommand struct {
-	name        string
-	description string
-	callback    func(args []string) error
-}
+// ---------- Functions ----------
 
 func commandHelp(args []string) error {
 	fmt.Println("===== Commands =====")
@@ -222,40 +237,76 @@ func commandMapb(args []string) error {
 	return nil
 }
 
-func saveConfig() error {
-	file, err := os.Create("config.json")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	if err := encoder.Encode(config); err != nil {
-		return err
+func commandCatch(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("Usage: catch <pokemon_name>")
+		return nil
 	}
 
-	return nil
-}
+	pokemonName := args[0]
+	pokeball := 100
 
-func loadConfig() error {
-	file, err := os.Open("config.json")
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Initialize default config
-			config.Next = "https://pokeapi.co/api/v2/location-area/?limit=20"
-			config.Previous = ""
+	// Cache pokemon for failed capture
+	cacheKey := "pokemon:" + pokemonName
+
+	var targetPokemon pokeapi.Pokemon
+
+	if cachedData, found := cache.Get(cacheKey); found {
+		err := json.Unmarshal(cachedData, &targetPokemon)
+		if err != nil {
+			fmt.Println("Error unmarshaling cached data:", err)
+		} else {
+			fmt.Printf("(from cache) Throwing a pokeball at %s.", targetPokemon.Name)
+			catch := rand.Intn(targetPokemon.BaseXP)
+			time.Sleep(time.Second)
+			fmt.Print(".")
+			time.Sleep(time.Second)
+			fmt.Print(".\n")
+			if catch < pokeball {
+				fmt.Printf("%s was caught!\n", targetPokemon.Name)
+				fmt.Printf("Adding %s to the Pokédex!\n", targetPokemon.Name)
+				Pokedex[targetPokemon.Name] = targetPokemon
+
+			} else {
+				fmt.Printf("%s escaped!\n", targetPokemon.Name)
+			}
 			return nil
 		}
-		return err
-	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&config); err != nil {
-		return err
 	}
 
+	// Pokemon not in cache; fetching from API
+	pokemonData, err := pokeapi.FetchPokemon(pokemonName)
+	if err != nil {
+		fmt.Println("Error fetching pokemon:", err)
+	}
+
+	// Caching data for future catch attempts
+	dataToCache, err := json.Marshal(pokemonData)
+	if err != nil {
+		fmt.Println("Error marshaling data for cache:", err)
+	} else {
+		cache.Add(cacheKey, dataToCache)
+	}
+
+	// Display Pokemon name and baseXP
+	fmt.Printf("Throwing a pokeball at %s.", pokemonData.Name)
+	catch := rand.Intn(pokemonData.BaseXP)
+	time.Sleep(time.Second)
+	fmt.Print(".")
+	time.Sleep(time.Second)
+	fmt.Print(".\n")
+	if catch < pokeball {
+		fmt.Printf("%s was caught!\n", pokemonData.Name)
+		fmt.Printf("Adding %s to the Pokédex!\n", pokemonData.Name)
+		Pokedex[pokemonData.Name] = *pokemonData
+	} else {
+		fmt.Printf("%s escaped!\n", pokemonData.Name)
+	}
+	for name, _ := range Pokedex {
+		fmt.Printf(name)
+	}
 	return nil
+
 }
 
 func commandExplore(args []string) error {
@@ -310,6 +361,44 @@ func commandExplore(args []string) error {
 	fmt.Printf("Pokémon in %s:\n", areaName)
 	for _, name := range pokemonNames {
 		fmt.Println("- " + name)
+	}
+
+	return nil
+}
+
+// ---------- CONFIG FUNCTIONS ----------
+
+func saveConfig() error {
+	file, err := os.Create("config.json")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(config); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func loadConfig() error {
+	file, err := os.Open("config.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Initialize default config
+			config.Next = "https://pokeapi.co/api/v2/location-area/?limit=20"
+			config.Previous = ""
+			return nil
+		}
+		return err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&config); err != nil {
+		return err
 	}
 
 	return nil
