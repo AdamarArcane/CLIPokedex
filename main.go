@@ -77,6 +77,11 @@ func main() {
 			description: "Attempt to capture a Pokémon",
 			callback:    commandCatch,
 		},
+		"inspect": {
+			name:        "inspect",
+			description: "Get detailed stats about a Pokémon",
+			callback:    commandInspect,
+		},
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -270,6 +275,7 @@ func commandCatch(args []string) error {
 			} else {
 				fmt.Printf("%s escaped!\n", targetPokemon.Name)
 			}
+
 			return nil
 		}
 	}
@@ -302,9 +308,7 @@ func commandCatch(args []string) error {
 	} else {
 		fmt.Printf("%s escaped!\n", pokemonData.Name)
 	}
-	for name, _ := range Pokedex {
-		fmt.Printf(name)
-	}
+
 	return nil
 
 }
@@ -361,6 +365,34 @@ func commandExplore(args []string) error {
 	fmt.Printf("Pokémon in %s:\n", areaName)
 	for _, name := range pokemonNames {
 		fmt.Println("- " + name)
+	}
+
+	return nil
+}
+
+func commandInspect(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("Usage: inspect <pokemon_name>")
+		return nil
+	}
+
+	pokemonName := args[0]
+
+	if _, found := Pokedex[pokemonName]; !found {
+		fmt.Printf("You have not caught %s!\n", pokemonName)
+		return nil
+	}
+
+	fmt.Printf("Name: %s (ID: %d)\n", pokemonName, Pokedex[pokemonName].ID)
+	fmt.Printf("Height: %d\n", Pokedex[pokemonName].Height)
+	fmt.Printf("Weight: %d\n", Pokedex[pokemonName].Weight)
+	fmt.Println("Types:")
+	for _, TypeEntry := range Pokedex[pokemonName].Type {
+		fmt.Printf("  - %s\n", TypeEntry.Type.Name)
+	}
+	fmt.Println("Stats:")
+	for _, StatEntry := range Pokedex[pokemonName].Stats {
+		fmt.Printf("  - %s: %d\n", StatEntry.Stat.Name, StatEntry.BaseStat)
 	}
 
 	return nil
